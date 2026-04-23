@@ -1,0 +1,1407 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>雪原サバイバル - Whiteout Survival</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{overflow:hidden;background:#1a2a3a;touch-action:none;user-select:none;font-family:'Segoe UI',sans-serif}
+canvas{display:block}
+#hud{position:fixed;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:10;pointer-events:none;flex-wrap:wrap;justify-content:center;max-width:95vw}
+.hud-item{background:rgba(255,255,255,0.92);padding:6px 13px;border-radius:14px;font-weight:bold;font-size:15px;box-shadow:0 2px 8px rgba(0,0,0,0.15);white-space:nowrap}
+#title-bar{position:fixed;top:0;left:0;right:0;height:50px;display:flex;align-items:center;justify-content:center;z-index:11;pointer-events:none}
+#title-text{background:linear-gradient(135deg,#ff6b35,#ff4500);color:#fff;padding:6px 20px;border-radius:0 0 16px 16px;font-weight:900;font-size:15px;letter-spacing:2px;box-shadow:0 3px 10px rgba(255,69,0,0.3);text-shadow:1px 1px 2px rgba(0,0,0,0.3)}
+#upgrade-panel{position:fixed;bottom:20px;right:12px;display:flex;flex-direction:column;gap:6px;z-index:10;max-height:70vh;overflow-y:auto}
+.upg-btn{padding:10px 14px;font-size:13px;border:none;border-radius:14px;color:#fff;font-weight:bold;cursor:pointer;pointer-events:auto;transition:transform 0.1s;text-align:left;min-width:135px}
+.upg-btn:active{transform:scale(0.95)}
+.upg-btn.cap{background:linear-gradient(135deg,#4a9ede,#2a7ebe);box-shadow:0 3px 0 #1a5e9e}
+.upg-btn.spd{background:linear-gradient(135deg,#5cc06a,#3aa04a);box-shadow:0 3px 0 #2a803a}
+.upg-btn.worker{background:linear-gradient(135deg,#e8a04a,#c8803a);box-shadow:0 3px 0 #a8602a}
+.upg-btn.build{background:linear-gradient(135deg,#c070d0,#9050a0);box-shadow:0 3px 0 #7030800}
+.upg-btn.npc-cap{background:linear-gradient(135deg,#50b0c0,#3090a0);box-shadow:0 3px 0 #207080}
+.upg-btn:disabled{opacity:0.45;filter:grayscale(0.4)}
+.upg-btn.locked{display:none}
+#touch-indicator{position:fixed;width:80px;height:80px;border-radius:50%;background:rgba(255,255,255,0.12);border:2px solid rgba(255,255,255,0.2);pointer-events:none;z-index:9;display:none;transform:translate(-50%,-50%)}
+#touch-knob{position:absolute;top:50%;left:50%;width:36px;height:36px;margin:-18px;border-radius:50%;background:rgba(255,255,255,0.3);pointer-events:none}
+#zone-label{position:fixed;top:85px;left:50%;transform:translateX(-50%);z-index:10;pointer-events:none;font-size:16px;font-weight:bold;color:#fff;text-shadow:0 2px 4px rgba(0,0,0,0.5);opacity:0;transition:opacity 0.3s}
+#blizzard-warning{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:20;pointer-events:none;font-size:28px;font-weight:900;color:#fff;text-shadow:0 0 20px rgba(100,150,255,0.8),0 0 40px rgba(100,150,255,0.4);opacity:0;transition:opacity 0.5s}
+#warmth-bar{position:fixed;top:58px;left:50%;transform:translateX(-50%);width:180px;height:14px;background:rgba(0,0,0,0.3);border-radius:7px;z-index:10;pointer-events:none;overflow:hidden;display:none}
+#warmth-fill{height:100%;background:linear-gradient(90deg,#ff4444,#ff8844,#ffcc44);border-radius:7px;transition:width 0.3s;width:100%}
+#level-popup{position:fixed;top:35%;left:50%;transform:translate(-50%,-50%);z-index:25;pointer-events:none;opacity:0;transition:opacity 0.5s;text-align:center}
+#level-popup .big{font-size:32px;font-weight:900;color:#ffd700;text-shadow:0 0 20px rgba(255,200,0,0.6),0 2px 4px rgba(0,0,0,0.5)}
+#level-popup .sub{font-size:16px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.5);margin-top:4px}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="title-bar"><div id="title-text">雪原サバイバル</div></div>
+<div id="hud">
+  <div class="hud-item" id="hud-money">💰 0</div>
+  <div class="hud-item" id="hud-inv">🎒 0/5</div>
+  <div class="hud-item" id="hud-level">⭐ Lv.1</div>
+</div>
+<div id="warmth-bar"><div id="warmth-fill"></div></div>
+<div id="zone-label"></div>
+<div id="blizzard-warning">❄️ 吹雪が来る！焚き火へ！</div>
+<div id="level-popup"><div class="big"></div><div class="sub"></div></div>
+<div id="upgrade-panel">
+  <button class="upg-btn worker" id="btn-worker" onclick="hireWorker()">👷 仲間 (30G)</button>
+  <button class="upg-btn cap" id="btn-cap" onclick="upgradeCap()">🎒 容量UP (15G)</button>
+  <button class="upg-btn spd" id="btn-spd" onclick="upgradeSpd()">👟 速度UP (20G)</button>
+  <button class="upg-btn npc-cap locked" id="btn-npc-cap" onclick="upgradeNpcCap()">📦 仲間容量 (40G)</button>
+  <button class="upg-btn build locked" id="btn-dry" onclick="buildDryRack()">🐟 干物台 (80G)</button>
+  <button class="upg-btn build locked" id="btn-hut" onclick="buildFishHut()">🏠 釣り小屋 (150G)</button>
+  <button class="upg-btn build locked" id="btn-bench" onclick="buildBench()">🪑 ベンチ (50G)</button>
+</div>
+<div id="touch-indicator"><div id="touch-knob"></div></div>
+
+<script>
+const C = document.getElementById('c');
+const X = C.getContext('2d');
+let W, H, SCALE;
+function resize() {
+  W = C.width = window.innerWidth;
+  H = C.height = window.innerHeight;
+  SCALE = Math.min(W / 420, H / 750) * 1.1;
+  SCALE = Math.max(0.7, Math.min(2.0, SCALE));
+}
+window.addEventListener('resize', resize);
+resize();
+
+// ===== ISO =====
+function toIso(wx, wy) { return { x: (wx - wy), y: (wx + wy) * 0.5 }; }
+function toScreen(wx, wy) {
+  const iso = toIso(wx, wy);
+  return { x: (iso.x - cam.x) * SCALE + W / 2, y: (iso.y - cam.y) * SCALE + H / 2 };
+}
+function screenToWorldDir(sx, sy) {
+  const wx = (sx * 0.5 + sy), wy = (-sx * 0.5 + sy);
+  const len = Math.hypot(wx, wy);
+  return len > 0 ? { x: wx / len, y: wy / len } : { x: 0, y: 0 };
+}
+
+// ===== STATE =====
+const cam = { x: 0, y: 0 };
+let money = 0;
+let xp = 0, level = 1;
+const XP_TABLE = [0, 30, 80, 160, 300, 500, 800, 1200, 1800, 2600, 3600, 5000, 7000, 10000, 15000, 99999];
+
+const player = {
+  x: 300, y: 490, speed: 120, capacity: 5,
+  rawFish: 0, cookedFish: 0, driedFish: 0,
+  moving: false, facing: 1, walkPhase: 0,
+  warmth: 100
+};
+
+// Zones
+const LAKE = { cx: 300, cy: 80, rx: 170, ry: 90 };
+const BASE = { x1: 130, y1: 340, x2: 470, y2: 640 };
+const GATE = { x1: 260, x2: 340, y: 340 };
+const CAMPFIRE = { x: 220, y: 440, r: 50 };
+const SELLZONE = { x: 380, y: 440, r: 50 };
+const DRYRACK = { x: 380, y: 560, r: 45, built: false };
+const FISHHUT = { x: 300, y: 180, r: 45, built: false, stock: 0, maxStock: 10, timer: 0 };
+const BENCH = { x: 200, y: 560, r: 40, built: false };
+
+// Blizzard
+let blizzard = { active: false, timer: 0, nextIn: 60, duration: 15, warningTimer: 0, intensity: 0 };
+
+// Buildings
+let hasDryRack = false, hasFishHut = false, hasBench = false;
+let dryCost = 80, hutCost = 150, benchCost = 50;
+let npcCapLevel = 0, npcCapCost = 40;
+
+// Fish
+let fishList = [];
+function spawnFish() {
+  fishList = [];
+  for (let i = 0; i < 18; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const rx = (0.3 + Math.random() * 0.65) * LAKE.rx;
+    const ry = (0.3 + Math.random() * 0.65) * LAKE.ry;
+    fishList.push({
+      x: LAKE.cx + Math.cos(angle) * rx,
+      y: LAKE.cy + Math.sin(angle) * ry,
+      alive: true, respawn: 0,
+      angle: Math.random() * Math.PI * 2,
+      swimSpeed: 0.3 + Math.random() * 0.5,
+      swimAngle: Math.random() * Math.PI * 2
+    });
+  }
+}
+spawnFish();
+
+// NPCs
+let npcs = [];
+function createNPC() {
+  return {
+    x: 300, y: 490, speed: 80 + Math.random() * 20,
+    rawFish: 0, cookedFish: 0, driedFish: 0,
+    capacity: 3 + npcCapLevel * 2,
+    state: 'goFish', stateTimer: 0, walkPhase: Math.random() * 10,
+    targetX: 0, targetY: 0, moving: false, targetSet: false,
+    warmth: 100
+  };
+}
+
+let particles = [];
+let floatingTexts = [];
+let flyingItems = [];
+
+const trees = [
+  {x:70,y:250,s:1.1},{x:530,y:280,s:0.9},{x:50,y:500,s:1.0},{x:550,y:480,s:1.2},
+  {x:90,y:640,s:0.8},{x:510,y:630,s:1.0},{x:60,y:100,s:1.1},{x:540,y:60,s:0.9},
+  {x:550,y:160,s:1.0},{x:80,y:400,s:0.7},{x:500,y:370,s:0.85},
+  {x:150,y:30,s:0.7},{x:450,y:20,s:0.8},{x:200,y:680,s:0.9},{x:400,y:670,s:0.75}
+];
+const snowballs = [{x:490,y:300,r:12},{x:110,y:310,r:10},{x:470,y:550,r:8}];
+
+let fencePosts = [];
+function buildFence() {
+  fencePosts = [];
+  const step = 22;
+  for (let x = BASE.x1; x <= BASE.x2; x += step) fencePosts.push({x, y: BASE.y2});
+  for (let x = BASE.x1; x <= BASE.x2; x += step) {
+    if (x >= GATE.x1 && x <= GATE.x2) continue;
+    fencePosts.push({x, y: BASE.y1});
+  }
+  for (let y = BASE.y1; y <= BASE.y2; y += step) fencePosts.push({x: BASE.x1, y});
+  for (let y = BASE.y1; y <= BASE.y2; y += step) fencePosts.push({x: BASE.x2, y});
+}
+buildFence();
+
+let bridgePlanks = [];
+for (let y = 200; y < 345; y += 14) bridgePlanks.push({ x: 300, y, w: 55 });
+
+let capCost = 15, spdCost = 20, workerCost = 30;
+let actionTimer = 0;
+const ACTION_CD = 0.25;
+
+// ===== LEVEL SYSTEM =====
+function gainXP(amount) {
+  xp += amount;
+  while (level < XP_TABLE.length && xp >= XP_TABLE[level]) {
+    level++;
+    showLevelUp();
+    unlockFeatures();
+  }
+  updateHUD();
+}
+
+function showLevelUp() {
+  const popup = document.getElementById('level-popup');
+  popup.querySelector('.big').textContent = `⭐ レベル ${level}!`;
+  const unlocks = [];
+  if (level === 2) unlocks.push('仲間容量UP解放');
+  if (level === 3) unlocks.push('干物台 建設可能');
+  if (level === 4) unlocks.push('ベンチ 建設可能');
+  if (level === 5) unlocks.push('吹雪イベント開始!');
+  if (level === 6) unlocks.push('釣り小屋 建設可能');
+  popup.querySelector('.sub').textContent = unlocks.length ? '🔓 ' + unlocks.join(', ') : '';
+  popup.style.opacity = '1';
+  setTimeout(() => popup.style.opacity = '0', 2500);
+}
+
+function unlockFeatures() {
+  if (level >= 2) document.getElementById('btn-npc-cap').classList.remove('locked');
+  if (level >= 3) document.getElementById('btn-dry').classList.remove('locked');
+  if (level >= 4) document.getElementById('btn-bench').classList.remove('locked');
+  if (level >= 5) {
+    document.getElementById('warmth-bar').style.display = 'block';
+    blizzard.nextIn = 40;
+  }
+  if (level >= 6) document.getElementById('btn-hut').classList.remove('locked');
+}
+
+// ===== DRAW =====
+function drawShadow(sx, sy, rx, ry) {
+  X.fillStyle = 'rgba(0,0,50,0.10)';
+  X.beginPath();
+  X.ellipse(sx, sy, rx * SCALE, ry * SCALE, 0, 0, Math.PI * 2);
+  X.fill();
+}
+
+function drawTree(wx, wy, s) {
+  const p = toScreen(wx, wy);
+  const sc = s * SCALE;
+  drawShadow(p.x + 8 * sc, p.y + 3 * sc, 18 * sc / SCALE, 8 * sc / SCALE);
+  X.fillStyle = '#7a5a30';
+  X.fillRect(p.x - 3 * sc, p.y - 12 * sc, 6 * sc, 14 * sc);
+  const cols = ['#1e7a3a', '#28a04a', '#32b858'];
+  for (let i = 0; i < 3; i++) {
+    const ly = p.y - 14 * sc - i * 16 * sc;
+    const lw = (28 - i * 5) * sc;
+    X.fillStyle = cols[i];
+    X.beginPath();
+    X.moveTo(p.x, ly - 22 * sc);
+    X.lineTo(p.x - lw / 2, ly);
+    X.lineTo(p.x + lw / 2, ly);
+    X.closePath();
+    X.fill();
+  }
+  X.fillStyle = '#eef4ff';
+  X.beginPath();
+  X.moveTo(p.x, p.y - 14 * sc - 48 * sc - 4 * sc);
+  X.lineTo(p.x - 8 * sc, p.y - 14 * sc - 48 * sc + 8 * sc);
+  X.lineTo(p.x + 8 * sc, p.y - 14 * sc - 48 * sc + 8 * sc);
+  X.closePath();
+  X.fill();
+}
+
+function drawSnowman(wx, wy) {
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  drawShadow(p.x, p.y + 2 * sc, 16, 7);
+  X.fillStyle = '#f0f0f5';
+  X.beginPath(); X.arc(p.x, p.y - 8 * sc, 16 * sc, 0, Math.PI * 2); X.fill();
+  X.beginPath(); X.arc(p.x, p.y - 26 * sc, 12 * sc, 0, Math.PI * 2); X.fill();
+  X.beginPath(); X.arc(p.x, p.y - 40 * sc, 9 * sc, 0, Math.PI * 2); X.fill();
+  X.strokeStyle = 'rgba(0,0,0,0.08)'; X.lineWidth = 1;
+  X.beginPath(); X.arc(p.x, p.y - 8 * sc, 16 * sc, 0, Math.PI * 2); X.stroke();
+  X.beginPath(); X.arc(p.x, p.y - 26 * sc, 12 * sc, 0, Math.PI * 2); X.stroke();
+  X.fillStyle = '#222'; X.beginPath();
+  X.arc(p.x - 3 * sc, p.y - 42 * sc, 1.5 * sc, 0, Math.PI * 2);
+  X.arc(p.x + 3 * sc, p.y - 42 * sc, 1.5 * sc, 0, Math.PI * 2);
+  X.fill();
+  X.fillStyle = '#ff6b00'; X.beginPath();
+  X.moveTo(p.x, p.y - 39 * sc);
+  X.lineTo(p.x + 9 * sc, p.y - 38 * sc);
+  X.lineTo(p.x, p.y - 37 * sc);
+  X.closePath(); X.fill();
+  X.strokeStyle = '#654321'; X.lineWidth = 2 * sc; X.beginPath();
+  X.moveTo(p.x - 12 * sc, p.y - 26 * sc);
+  X.lineTo(p.x - 24 * sc, p.y - 34 * sc);
+  X.moveTo(p.x + 12 * sc, p.y - 26 * sc);
+  X.lineTo(p.x + 24 * sc, p.y - 34 * sc);
+  X.stroke();
+  X.fillStyle = '#e03030'; X.beginPath();
+  X.ellipse(p.x, p.y - 33 * sc, 10 * sc, 3 * sc, 0, 0, Math.PI * 2);
+  X.fill();
+}
+
+function drawFencePost(wx, wy) {
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  X.fillStyle = '#c9a85c';
+  X.beginPath();
+  X.moveTo(p.x - 3 * sc, p.y);
+  X.lineTo(p.x - 3 * sc, p.y - 22 * sc);
+  X.lineTo(p.x, p.y - 27 * sc);
+  X.lineTo(p.x + 3 * sc, p.y - 22 * sc);
+  X.lineTo(p.x + 3 * sc, p.y);
+  X.closePath(); X.fill();
+  X.fillStyle = '#b89040';
+  X.fillRect(p.x - 2.5 * sc, p.y - 10 * sc, 5 * sc, 2 * sc);
+  X.fillRect(p.x - 2.5 * sc, p.y - 18 * sc, 5 * sc, 2 * sc);
+  X.fillStyle = '#eef';
+  X.beginPath();
+  X.ellipse(p.x, p.y - 26 * sc, 4 * sc, 2 * sc, 0, 0, Math.PI * 2);
+  X.fill();
+}
+
+function drawCampfire(wx, wy) {
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  const t = performance.now() * 0.004;
+  X.fillStyle = '#888'; X.beginPath(); X.ellipse(p.x, p.y, 28 * sc, 14 * sc, 0, 0, Math.PI * 2); X.fill();
+  X.fillStyle = '#666'; X.beginPath(); X.ellipse(p.x, p.y - 2 * sc, 22 * sc, 11 * sc, 0, 0, Math.PI * 2); X.fill();
+  X.fillStyle = '#7a5020';
+  for (let i = 0; i < 3; i++) {
+    X.save(); X.translate(p.x, p.y - 4 * sc); X.rotate(i * Math.PI / 3 + 0.3);
+    X.fillRect(-2 * sc, -14 * sc, 4 * sc, 28 * sc); X.restore();
+  }
+  const grad = X.createRadialGradient(p.x, p.y - 15 * sc, 0, p.x, p.y - 10 * sc, 40 * sc);
+  grad.addColorStop(0, 'rgba(255,150,30,0.25)'); grad.addColorStop(1, 'rgba(255,100,0,0)');
+  X.fillStyle = grad; X.fillRect(p.x - 50 * sc, p.y - 60 * sc, 100 * sc, 70 * sc);
+  for (let i = 0; i < 7; i++) {
+    const fx = p.x + Math.sin(t * 1.3 + i * 1.7) * 7 * sc;
+    const fy = p.y - 8 * sc - i * 4 * sc + Math.sin(t * 2 + i) * 2 * sc;
+    const sz = (9 - i) * sc;
+    const alpha = 0.9 - i * 0.1;
+    X.fillStyle = i < 3 ? `rgba(255,80,0,${alpha})` : `rgba(255,200,20,${alpha})`;
+    X.beginPath(); X.ellipse(fx, fy, sz * 0.7, sz, 0, 0, Math.PI * 2); X.fill();
+  }
+  X.fillStyle = '#2a2a2a';
+  X.beginPath(); X.ellipse(p.x, p.y - 14 * sc, 16 * sc, 10 * sc, 0, 0, Math.PI); X.fill();
+  X.beginPath(); X.ellipse(p.x, p.y - 14 * sc, 16 * sc, 6 * sc, 0, Math.PI, 0); X.fill();
+  X.strokeStyle = '#333'; X.lineWidth = 2 * sc; X.beginPath();
+  X.moveTo(p.x - 14 * sc, p.y + 4 * sc);
+  X.lineTo(p.x, p.y - 36 * sc);
+  X.lineTo(p.x + 14 * sc, p.y + 4 * sc);
+  X.stroke();
+  X.fillStyle = 'rgba(255,255,255,0.8)'; X.font = `bold ${12 * sc}px sans-serif`; X.textAlign = 'center';
+  X.fillText('🔥 焚き火', p.x, p.y + 22 * sc);
+}
+
+function drawSellStand(wx, wy) {
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  X.fillStyle = '#b89050';
+  X.beginPath();
+  X.moveTo(p.x, p.y - 16 * sc); X.lineTo(p.x + 28 * sc, p.y - 8 * sc);
+  X.lineTo(p.x, p.y); X.lineTo(p.x - 28 * sc, p.y - 8 * sc); X.closePath(); X.fill();
+  X.fillStyle = '#a07838'; X.beginPath();
+  X.moveTo(p.x - 28 * sc, p.y - 8 * sc); X.lineTo(p.x, p.y);
+  X.lineTo(p.x, p.y + 6 * sc); X.lineTo(p.x - 28 * sc, p.y - 2 * sc); X.closePath(); X.fill();
+  X.fillStyle = '#c8a060'; X.beginPath();
+  X.moveTo(p.x, p.y); X.lineTo(p.x + 28 * sc, p.y - 8 * sc);
+  X.lineTo(p.x + 28 * sc, p.y - 2 * sc); X.lineTo(p.x, p.y + 6 * sc); X.closePath(); X.fill();
+  X.fillStyle = '#8a6828';
+  X.fillRect(p.x - 22 * sc, p.y - 6 * sc, 3 * sc, 12 * sc);
+  X.fillRect(p.x + 19 * sc, p.y - 6 * sc, 3 * sc, 12 * sc);
+  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+    const gx = p.x + (i - 1) * 12 * sc + (j - 1) * (-6 * sc);
+    const gy = p.y - 12 * sc + (i - 1) * 3.5 * sc + (j - 1) * 3.5 * sc;
+    X.fillStyle = 'rgba(100,200,100,0.6)'; X.beginPath();
+    X.moveTo(gx, gy - 3 * sc); X.lineTo(gx + 5 * sc, gy);
+    X.lineTo(gx, gy + 3 * sc); X.lineTo(gx - 5 * sc, gy); X.closePath(); X.fill();
+  }
+  X.fillStyle = 'rgba(255,255,255,0.8)'; X.font = `bold ${12 * sc}px sans-serif`; X.textAlign = 'center';
+  X.fillText('🏪 販売所', p.x, p.y + 20 * sc);
+  // Coin pile next to stand
+  drawCoinPile(p.x + 34 * sc, p.y + 2 * sc, sc);
+}
+
+function drawCoinPile(bx, by, sc) {
+  if (money <= 0) return;
+  // Each coin stack represents some gold. Max visual: ~50 coins in stacks
+  const totalCoins = Math.min(50, Math.ceil(money / 5));
+  const coinsPerStack = 5;
+  const numStacks = Math.ceil(totalCoins / coinsPerStack);
+  // Arrange stacks in a small grid pattern
+  const positions = [];
+  for (let i = 0; i < numStacks; i++) {
+    const row = Math.floor(i / 3);
+    const col = i % 3;
+    // Iso offset for each stack
+    const ox = (col - 1) * 10 * sc + row * 5 * sc;
+    const oy = (col - 1) * 5 * sc + row * 7 * sc;
+    const stackH = Math.min(coinsPerStack, totalCoins - i * coinsPerStack);
+    positions.push({ ox, oy, stackH });
+  }
+  // Sort by oy for depth
+  positions.sort((a, b) => a.oy - b.oy);
+  for (const pos of positions) {
+    for (let c = 0; c < pos.stackH; c++) {
+      const cx = bx + pos.ox;
+      const cy = by + pos.oy - c * 2.5 * sc;
+      // Coin edge (darker)
+      X.fillStyle = '#c8960a';
+      X.beginPath();
+      X.ellipse(cx, cy + 1.2 * sc, 5 * sc, 2.5 * sc, 0, 0, Math.PI * 2);
+      X.fill();
+      // Coin top face
+      X.fillStyle = '#ffd700';
+      X.beginPath();
+      X.ellipse(cx, cy, 5 * sc, 2.5 * sc, 0, 0, Math.PI * 2);
+      X.fill();
+      // Shine
+      X.fillStyle = 'rgba(255,255,200,0.5)';
+      X.beginPath();
+      X.ellipse(cx - 1.2 * sc, cy - 0.5 * sc, 2 * sc, 1 * sc, -0.3, 0, Math.PI * 2);
+      X.fill();
+    }
+  }
+  // Amount label above the pile
+  if (money >= 10) {
+    const labelY = by - Math.min(numStacks, 4) * 2 * sc - totalCoins * 0.3 * sc - 10 * sc;
+    X.fillStyle = 'rgba(0,0,0,0.55)';
+    const textW = Math.max(30 * sc, String(money).length * 8 * sc + 16 * sc);
+    const textH = 16 * sc;
+    X.beginPath();
+    X.roundRect(bx - textW / 2, labelY - textH / 2, textW, textH, 6 * sc);
+    X.fill();
+    X.fillStyle = '#ffd700';
+    X.font = `bold ${10 * sc}px sans-serif`;
+    X.textAlign = 'center'; X.textBaseline = 'middle';
+    X.fillText(`${money}G`, bx, labelY);
+    X.textBaseline = 'alphabetic';
+  }
+}
+
+function drawDryRack(wx, wy) {
+  if (!hasDryRack) return;
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  drawShadow(p.x, p.y + 2 * sc, 22, 10);
+  // Posts
+  X.fillStyle = '#8a6828';
+  X.fillRect(p.x - 22 * sc, p.y - 30 * sc, 4 * sc, 32 * sc);
+  X.fillRect(p.x + 18 * sc, p.y - 30 * sc, 4 * sc, 32 * sc);
+  // Cross bar
+  X.fillStyle = '#a07838';
+  X.fillRect(p.x - 22 * sc, p.y - 32 * sc, 44 * sc, 3 * sc);
+  // Hanging ropes
+  X.strokeStyle = '#887050'; X.lineWidth = 1.5 * sc;
+  for (let i = 0; i < 4; i++) {
+    const rx = p.x - 14 * sc + i * 10 * sc;
+    X.beginPath(); X.moveTo(rx, p.y - 31 * sc); X.lineTo(rx, p.y - 20 * sc); X.stroke();
+  }
+  // Hanging fish
+  const t = performance.now() * 0.002;
+  for (let i = 0; i < 4; i++) {
+    const fx = p.x - 14 * sc + i * 10 * sc;
+    const fy = p.y - 18 * sc + Math.sin(t + i) * 1.5 * sc;
+    X.fillStyle = '#d4881c'; X.beginPath();
+    X.ellipse(fx, fy, 5 * sc, 3 * sc, 0.3, 0, Math.PI * 2); X.fill();
+  }
+  X.fillStyle = 'rgba(255,255,255,0.8)'; X.font = `bold ${11 * sc}px sans-serif`; X.textAlign = 'center';
+  X.fillText('🐟 干物台', p.x, p.y + 12 * sc);
+}
+
+function drawFishHut(wx, wy) {
+  if (!hasFishHut) return;
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  drawShadow(p.x, p.y + 4 * sc, 28, 14);
+  // Floor
+  X.fillStyle = '#b89050'; X.beginPath();
+  X.moveTo(p.x, p.y - 8 * sc); X.lineTo(p.x + 30 * sc, p.y);
+  X.lineTo(p.x, p.y + 8 * sc); X.lineTo(p.x - 30 * sc, p.y); X.closePath(); X.fill();
+  // Walls
+  X.fillStyle = '#a07838'; X.beginPath();
+  X.moveTo(p.x - 30 * sc, p.y); X.lineTo(p.x, p.y + 8 * sc);
+  X.lineTo(p.x, p.y - 20 * sc); X.lineTo(p.x - 30 * sc, p.y - 28 * sc); X.closePath(); X.fill();
+  X.fillStyle = '#c8a860'; X.beginPath();
+  X.moveTo(p.x, p.y + 8 * sc); X.lineTo(p.x + 30 * sc, p.y);
+  X.lineTo(p.x + 30 * sc, p.y - 28 * sc); X.lineTo(p.x, p.y - 20 * sc); X.closePath(); X.fill();
+  // Roof
+  X.fillStyle = '#e8ddd0'; X.beginPath();
+  X.moveTo(p.x, p.y - 40 * sc);
+  X.lineTo(p.x + 34 * sc, p.y - 26 * sc);
+  X.lineTo(p.x, p.y - 16 * sc);
+  X.lineTo(p.x - 34 * sc, p.y - 26 * sc); X.closePath(); X.fill();
+  // Snow on roof
+  X.fillStyle = '#f0f2f8'; X.beginPath();
+  X.moveTo(p.x, p.y - 43 * sc);
+  X.lineTo(p.x + 32 * sc, p.y - 28 * sc);
+  X.lineTo(p.x, p.y - 20 * sc);
+  X.lineTo(p.x - 32 * sc, p.y - 28 * sc); X.closePath(); X.fill();
+  // Stock indicator
+  X.fillStyle = 'rgba(0,0,0,0.6)'; X.beginPath();
+  X.arc(p.x, p.y - 48 * sc, 12 * sc, 0, Math.PI * 2); X.fill();
+  X.fillStyle = '#fff'; X.font = `bold ${10 * sc}px sans-serif`; X.textAlign = 'center'; X.textBaseline = 'middle';
+  X.fillText(`${Math.floor(FISHHUT.stock)}`, p.x, p.y - 48 * sc);
+  X.textBaseline = 'alphabetic';
+  X.fillStyle = 'rgba(255,255,255,0.8)'; X.font = `bold ${11 * sc}px sans-serif`;
+  X.fillText('🏠 釣り小屋', p.x, p.y + 16 * sc);
+}
+
+function drawBench(wx, wy) {
+  if (!hasBench) return;
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  // Bench seat
+  X.fillStyle = '#b89050'; X.beginPath();
+  X.moveTo(p.x - 20 * sc, p.y - 6 * sc); X.lineTo(p.x + 20 * sc, p.y - 12 * sc);
+  X.lineTo(p.x + 20 * sc, p.y - 8 * sc); X.lineTo(p.x - 20 * sc, p.y - 2 * sc); X.closePath(); X.fill();
+  // Legs
+  X.fillStyle = '#8a6828';
+  X.fillRect(p.x - 16 * sc, p.y - 4 * sc, 3 * sc, 6 * sc);
+  X.fillRect(p.x + 14 * sc, p.y - 10 * sc, 3 * sc, 6 * sc);
+  // Backrest
+  X.fillStyle = '#a07838';
+  X.fillRect(p.x - 20 * sc, p.y - 18 * sc, 3 * sc, 14 * sc);
+  X.fillRect(p.x + 18 * sc, p.y - 24 * sc, 3 * sc, 14 * sc);
+  X.fillStyle = '#c4a060';
+  X.beginPath();
+  X.moveTo(p.x - 20 * sc, p.y - 18 * sc); X.lineTo(p.x + 20 * sc, p.y - 24 * sc);
+  X.lineTo(p.x + 20 * sc, p.y - 20 * sc); X.lineTo(p.x - 20 * sc, p.y - 14 * sc); X.closePath(); X.fill();
+  X.fillStyle = 'rgba(255,255,255,0.7)'; X.font = `bold ${10 * sc}px sans-serif`; X.textAlign = 'center';
+  X.fillText('🪑 休憩', p.x, p.y + 10 * sc);
+}
+
+function drawStackItem(sx, sy, type) {
+  const sc = SCALE;
+  const isDried = type === 'dried';
+  const isCooked = type === 'cooked';
+  X.fillStyle = isDried ? '#c0701a' : isCooked ? '#d4881c' : '#ff8c42';
+  X.beginPath(); X.ellipse(sx, sy, 10 * sc, 4.5 * sc, -0.15, 0, Math.PI * 2); X.fill();
+  if (!isCooked && !isDried) {
+    X.strokeStyle = 'rgba(255,255,255,0.6)'; X.lineWidth = 1.2 * sc; X.beginPath();
+    X.moveTo(sx + 3 * sc, sy - 4 * sc); X.lineTo(sx + 3 * sc, sy + 4 * sc);
+    X.moveTo(sx - 2 * sc, sy - 3.5 * sc); X.lineTo(sx - 2 * sc, sy + 3.5 * sc); X.stroke();
+  } else if (isDried) {
+    X.strokeStyle = 'rgba(60,30,0,0.3)'; X.lineWidth = 0.8 * sc; X.beginPath();
+    X.moveTo(sx - 6 * sc, sy); X.lineTo(sx + 6 * sc, sy); X.stroke();
+    // Star mark for premium
+    X.fillStyle = 'rgba(255,215,0,0.7)'; X.font = `${8 * sc}px sans-serif`; X.textAlign = 'center';
+    X.fillText('★', sx + 7 * sc, sy - 2 * sc);
+  } else {
+    X.strokeStyle = 'rgba(100,50,0,0.4)'; X.lineWidth = 1 * sc; X.beginPath();
+    X.moveTo(sx - 5 * sc, sy - 1 * sc); X.lineTo(sx + 5 * sc, sy - 1 * sc);
+    X.moveTo(sx - 4 * sc, sy + 2 * sc); X.lineTo(sx + 4 * sc, sy + 2 * sc); X.stroke();
+  }
+  X.strokeStyle = 'rgba(0,0,0,0.15)'; X.lineWidth = 0.7 * sc;
+  X.beginPath(); X.ellipse(sx, sy, 10 * sc, 4.5 * sc, -0.15, 0, Math.PI * 2); X.stroke();
+}
+
+function drawCharacter(wx, wy, opts) {
+  const p = toScreen(wx, wy);
+  const { rawFish = 0, cookedFish = 0, driedFish = 0, isMoving = false, phase = 0, isPlayer = false, scale: charScale = 1, warmth = 100 } = opts;
+  const sc = SCALE * charScale;
+  const bob = isMoving ? Math.sin(phase * 8) * 2.5 * sc : 0;
+  const legSwing = isMoving ? Math.sin(phase * 8) * 4 * sc : 0;
+  drawShadow(p.x, p.y + 2 * sc, 14 * charScale, 7 * charScale);
+  X.fillStyle = '#2a2a3a';
+  X.beginPath(); X.ellipse(p.x - 5 * sc + legSwing, p.y - 1 * sc, 5 * sc, 3 * sc, 0, 0, Math.PI * 2); X.fill();
+  X.beginPath(); X.ellipse(p.x + 5 * sc - legSwing, p.y - 1 * sc, 5 * sc, 3 * sc, 0, 0, Math.PI * 2); X.fill();
+  const bodyGrad = X.createLinearGradient(p.x, p.y - 28 * sc + bob, p.x, p.y - 3 * sc + bob);
+  if (isPlayer) { bodyGrad.addColorStop(0, '#5ab8f0'); bodyGrad.addColorStop(1, '#3090d0'); }
+  else { bodyGrad.addColorStop(0, '#70b8e8'); bodyGrad.addColorStop(1, '#4898c8'); }
+  X.fillStyle = bodyGrad; X.beginPath();
+  X.moveTo(p.x - 12 * sc, p.y - 3 * sc + bob);
+  X.quadraticCurveTo(p.x - 14 * sc, p.y - 16 * sc + bob, p.x - 9 * sc, p.y - 26 * sc + bob);
+  X.quadraticCurveTo(p.x, p.y - 32 * sc + bob, p.x + 9 * sc, p.y - 26 * sc + bob);
+  X.quadraticCurveTo(p.x + 14 * sc, p.y - 16 * sc + bob, p.x + 12 * sc, p.y - 3 * sc + bob);
+  X.closePath(); X.fill();
+  X.fillStyle = 'rgba(0,0,0,0.15)'; X.beginPath();
+  X.ellipse(p.x, p.y - 10 * sc + bob, 12 * sc, 3 * sc, 0, 0, Math.PI * 2); X.fill();
+  X.fillStyle = '#ffe4c4'; X.beginPath();
+  X.arc(p.x, p.y - 28 * sc + bob, 7 * sc, 0.2, Math.PI - 0.2); X.fill();
+  X.fillStyle = '#333'; X.beginPath();
+  X.arc(p.x - 2.5 * sc, p.y - 28.5 * sc + bob, 1.3 * sc, 0, Math.PI * 2);
+  X.arc(p.x + 2.5 * sc, p.y - 28.5 * sc + bob, 1.3 * sc, 0, Math.PI * 2); X.fill();
+  // Mouth - changes based on warmth
+  if (blizzard.active && warmth < 50) {
+    X.strokeStyle = '#7070ff'; X.lineWidth = 1 * sc; X.beginPath();
+    X.moveTo(p.x - 3 * sc, p.y - 25 * sc + bob);
+    X.lineTo(p.x - 1 * sc, p.y - 26 * sc + bob);
+    X.lineTo(p.x + 1 * sc, p.y - 25 * sc + bob);
+    X.lineTo(p.x + 3 * sc, p.y - 26 * sc + bob);
+    X.stroke();
+  } else {
+    X.strokeStyle = '#a07060'; X.lineWidth = 0.8 * sc; X.beginPath();
+    X.arc(p.x, p.y - 26 * sc + bob, 3 * sc, 0.2, Math.PI - 0.2); X.stroke();
+  }
+  X.fillStyle = isPlayer ? '#3a90d0' : '#4090c0'; X.beginPath();
+  X.arc(p.x, p.y - 31 * sc + bob, 10 * sc, Math.PI, 0); X.fill();
+  X.fillStyle = '#fff'; X.beginPath();
+  X.arc(p.x, p.y - 40 * sc + bob, 3 * sc, 0, Math.PI * 2); X.fill();
+  // Shivering effect
+  if (blizzard.active && warmth < 40) {
+    const shiver = Math.sin(performance.now() * 0.02) * 1.5 * sc;
+    X.strokeStyle = 'rgba(100,150,255,0.5)'; X.lineWidth = 1 * sc;
+    for (let i = 0; i < 3; i++) {
+      const sx2 = p.x + (Math.random() - 0.5) * 20 * sc;
+      const sy2 = p.y - 20 * sc + (Math.random() - 0.5) * 20 * sc + shiver;
+      X.beginPath();
+      X.moveTo(sx2, sy2); X.lineTo(sx2 + 4 * sc, sy2 - 4 * sc);
+      X.moveTo(sx2, sy2); X.lineTo(sx2 - 3 * sc, sy2 - 3 * sc);
+      X.stroke();
+    }
+  }
+  if (isPlayer) {
+    X.strokeStyle = 'rgba(90,220,100,0.6)'; X.lineWidth = 1.5 * sc;
+    X.setLineDash([4 * sc, 3 * sc]); X.beginPath();
+    X.ellipse(p.x, p.y - 1 * sc, 17 * sc, 9 * sc, 0, 0, Math.PI * 2);
+    X.stroke(); X.setLineDash([]);
+  }
+  // Item stack
+  let stackY = p.y - 43 * sc + bob;
+  const totalItems = rawFish + cookedFish + driedFish;
+  if (totalItems > 0) {
+    const bubbleY = stackY - Math.min(totalItems, 6) * 5.5 * sc - 8 * sc;
+    X.fillStyle = 'rgba(0,0,0,0.5)'; X.beginPath();
+    X.arc(p.x + 14 * sc, bubbleY, 9 * sc, 0, Math.PI * 2); X.fill();
+    X.fillStyle = '#fff'; X.font = `bold ${10 * sc}px sans-serif`;
+    X.textAlign = 'center'; X.textBaseline = 'middle';
+    X.fillText(`${totalItems}`, p.x + 14 * sc, bubbleY);
+    X.textBaseline = 'alphabetic';
+  }
+  let si = 0;
+  for (let i = 0; i < Math.min(rawFish, 6); i++) drawStackItem(p.x, stackY - (si++) * 5.5 * sc, 'raw');
+  for (let i = 0; i < Math.min(cookedFish, 6); i++) drawStackItem(p.x, stackY - (si++) * 5.5 * sc, 'cooked');
+  for (let i = 0; i < Math.min(driedFish, 6); i++) drawStackItem(p.x, stackY - (si++) * 5.5 * sc, 'dried');
+}
+
+function drawFishInWater(fish) {
+  if (!fish.alive) return;
+  const p = toScreen(fish.x, fish.y);
+  const sc = SCALE;
+  const t = performance.now() * 0.001;
+  X.save(); X.translate(p.x, p.y);
+  X.rotate(fish.swimAngle + Math.sin(t * fish.swimSpeed) * 0.3);
+  X.fillStyle = '#ff8844'; X.globalAlpha = 0.85;
+  X.beginPath(); X.ellipse(0, 0, 11 * sc, 5 * sc, 0, 0, Math.PI * 2); X.fill();
+  X.beginPath(); X.moveTo(-9 * sc, 0);
+  X.lineTo(-15 * sc, -5 * sc); X.lineTo(-15 * sc, 5 * sc); X.closePath(); X.fill();
+  X.strokeStyle = '#fff'; X.lineWidth = 1.5 * sc; X.globalAlpha = 0.7;
+  X.beginPath();
+  X.moveTo(3 * sc, -4.5 * sc); X.lineTo(3 * sc, 4.5 * sc);
+  X.moveTo(-2 * sc, -4 * sc); X.lineTo(-2 * sc, 4 * sc); X.stroke();
+  X.globalAlpha = 1; X.fillStyle = '#fff'; X.beginPath();
+  X.arc(6 * sc, -1 * sc, 2.2 * sc, 0, Math.PI * 2); X.fill();
+  X.fillStyle = '#111'; X.beginPath();
+  X.arc(6.5 * sc, -1 * sc, 1.2 * sc, 0, Math.PI * 2); X.fill();
+  X.restore();
+}
+
+function drawBridgePlank(plank) {
+  const left = toScreen(plank.x - plank.w / 2, plank.y);
+  const right = toScreen(plank.x + plank.w / 2, plank.y);
+  const leftB = toScreen(plank.x - plank.w / 2, plank.y + 5);
+  const rightB = toScreen(plank.x + plank.w / 2, plank.y + 5);
+  X.fillStyle = '#c4a060'; X.beginPath();
+  X.moveTo(left.x, left.y); X.lineTo(right.x, right.y);
+  X.lineTo(rightB.x, rightB.y); X.lineTo(leftB.x, leftB.y);
+  X.closePath(); X.fill();
+  X.strokeStyle = '#a88040'; X.lineWidth = 0.5 * SCALE; X.stroke();
+}
+
+function drawActionRing(wx, wy, progress, color) {
+  if (progress <= 0) return;
+  const p = toScreen(wx, wy);
+  const sc = SCALE;
+  X.strokeStyle = color; X.lineWidth = 3 * sc; X.lineCap = 'round'; X.beginPath();
+  X.arc(p.x, p.y - 15 * sc, 22 * sc, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * progress);
+  X.stroke(); X.lineCap = 'butt';
+}
+
+// ===== GROUND =====
+function drawGround() {
+  const skyGrad = X.createLinearGradient(0, 0, 0, H);
+  skyGrad.addColorStop(0, blizzard.active ? '#8aa0b8' : '#c8dff0');
+  skyGrad.addColorStop(0.3, blizzard.active ? '#98aac0' : '#d8e8f0');
+  skyGrad.addColorStop(1, blizzard.active ? '#a0b0c0' : '#e8f0f8');
+  X.fillStyle = skyGrad; X.fillRect(0, 0, W, H);
+  const corners = [toScreen(-100, -100), toScreen(700, -100), toScreen(700, 800), toScreen(-100, 800)];
+  X.fillStyle = blizzard.active ? '#dde0e8' : '#f0f2f8'; X.beginPath();
+  X.moveTo(corners[0].x, corners[0].y);
+  for (let i = 1; i < corners.length; i++) X.lineTo(corners[i].x, corners[i].y);
+  X.closePath(); X.fill();
+  X.fillStyle = 'rgba(220,225,240,0.5)';
+  for (let i = 0; i < 40; i++) {
+    const sx = ((i * 137 + 50) % 600), sy = ((i * 213 + 30) % 700);
+    const sp = toScreen(sx, sy);
+    X.beginPath(); X.arc(sp.x, sp.y, (2 + (i % 3)) * SCALE, 0, Math.PI * 2); X.fill();
+  }
+  drawLake(); drawBaseFloor();
+  for (const plank of bridgePlanks) drawBridgePlank(plank);
+  const railL1 = toScreen(275, 195), railL2 = toScreen(275, 345);
+  const railR1 = toScreen(325, 195), railR2 = toScreen(325, 345);
+  X.strokeStyle = '#b89050'; X.lineWidth = 2.5 * SCALE; X.beginPath();
+  X.moveTo(railL1.x, railL1.y); X.lineTo(railL2.x, railL2.y);
+  X.moveTo(railR1.x, railR1.y); X.lineTo(railR2.x, railR2.y); X.stroke();
+}
+
+function drawLake() {
+  const sc = SCALE;
+  X.fillStyle = blizzard.active ? '#90bcd8' : '#a8d4ef'; X.beginPath();
+  for (let i = 0; i <= 32; i++) {
+    const angle = (i / 32) * Math.PI * 2;
+    const wx = LAKE.cx + Math.cos(angle) * LAKE.rx, wy = LAKE.cy + Math.sin(angle) * LAKE.ry;
+    const p = toScreen(wx, wy);
+    if (i === 0) X.moveTo(p.x, p.y); else X.lineTo(p.x, p.y);
+  }
+  X.closePath(); X.fill();
+  X.fillStyle = 'rgba(255,255,255,0.3)';
+  for (let i = 0; i < 8; i++) {
+    const angle = i * 0.8 + 1;
+    const p = toScreen(LAKE.cx + Math.cos(angle) * LAKE.rx * 0.5, LAKE.cy + Math.sin(angle) * LAKE.ry * 0.5);
+    X.beginPath(); X.ellipse(p.x, p.y, 15 * sc, 4 * sc, angle * 0.3, 0, Math.PI * 2); X.fill();
+  }
+  X.strokeStyle = 'rgba(130,180,210,0.3)'; X.lineWidth = 1 * sc;
+  for (let i = 0; i < 5; i++) {
+    const p1 = toScreen(LAKE.cx + (i - 2) * 40, LAKE.cy - 20 + i * 10);
+    const p2 = toScreen(LAKE.cx + (i - 2) * 40 + 30 + i * 10, LAKE.cy - 5 + i * 5);
+    X.beginPath(); X.moveTo(p1.x, p1.y); X.lineTo(p2.x, p2.y); X.stroke();
+  }
+  X.fillStyle = 'rgba(255,255,255,0.8)'; X.font = `bold ${13 * sc}px sans-serif`; X.textAlign = 'center';
+  const lp = toScreen(LAKE.cx, LAKE.cy - LAKE.ry + 15);
+  X.fillText('🌊 釣り場', lp.x, lp.y);
+}
+
+function drawBaseFloor() {
+  const tl = toScreen(BASE.x1, BASE.y1), tr = toScreen(BASE.x2, BASE.y1);
+  const br = toScreen(BASE.x2, BASE.y2), bl = toScreen(BASE.x1, BASE.y2);
+  X.fillStyle = '#e4e0da'; X.beginPath();
+  X.moveTo(tl.x, tl.y); X.lineTo(tr.x, tr.y);
+  X.lineTo(br.x, br.y); X.lineTo(bl.x, bl.y); X.closePath(); X.fill();
+  X.strokeStyle = 'rgba(0,0,0,0.03)'; X.lineWidth = 1;
+  for (let i = 0; i < 8; i++) {
+    const y = BASE.y1 + (BASE.y2 - BASE.y1) * i / 8;
+    const lp = toScreen(BASE.x1, y), rp = toScreen(BASE.x2, y);
+    X.beginPath(); X.moveTo(lp.x, lp.y); X.lineTo(rp.x, rp.y); X.stroke();
+  }
+}
+
+// ===== PARTICLES =====
+function spawnSnowParticle() {
+  const speed = blizzard.active ? 3 : 1;
+  particles.push({
+    x: cam.x + (Math.random() - 0.5) * W / SCALE * 1.5,
+    y: cam.y - H / SCALE * 0.6,
+    vx: (-0.3 + Math.random() * 0.2) * speed * (blizzard.active ? 4 : 1),
+    vy: (0.4 + Math.random() * 0.3) * speed,
+    life: 4 + Math.random() * 3,
+    size: blizzard.active ? (2 + Math.random() * 3) : (1.5 + Math.random() * 2),
+    type: 'snow'
+  });
+}
+function spawnFireParticle() {
+  const iso = toIso(CAMPFIRE.x, CAMPFIRE.y);
+  particles.push({
+    x: iso.x + (Math.random() - 0.5) * 10,
+    y: iso.y - 20 - Math.random() * 5,
+    vx: (Math.random() - 0.5) * 5, vy: -15 - Math.random() * 10,
+    life: 0.5 + Math.random() * 0.5, size: 2 + Math.random() * 3, type: 'smoke'
+  });
+}
+function addFloatingText(wx, wy, text, color) {
+  const p = toIso(wx, wy);
+  floatingTexts.push({ x: p.x, y: p.y - 30, text, color, life: 1.2, vy: -30, alpha: 1 });
+}
+function spawnFlyingItem(fromWx, fromWy, toWx, toWy, type) {
+  flyingItems.push({ fromX: fromWx, fromY: fromWy, toX: toWx, toY: toWy, type, progress: 0, duration: 0.25 });
+}
+
+// ===== NPC =====
+function updateNPC(npc, dt) {
+  npc.walkPhase += dt;
+  // Blizzard warmth
+  if (level >= 5) {
+    if (blizzard.active) {
+      if (dist(npc.x, npc.y, CAMPFIRE.x, CAMPFIRE.y) < 80) {
+        npc.warmth = Math.min(100, npc.warmth + 30 * dt);
+      } else if (hasBench && dist(npc.x, npc.y, BENCH.x, BENCH.y) < BENCH.r) {
+        npc.warmth = Math.min(100, npc.warmth + 15 * dt);
+      } else {
+        npc.warmth -= 12 * dt;
+      }
+      // If too cold, rush to campfire
+      if (npc.warmth < 30 && npc.state !== 'warming') {
+        npc.prevState = npc.state;
+        npc.state = 'warming';
+        npc.targetSet = false;
+      }
+    } else {
+      npc.warmth = Math.min(100, npc.warmth + 20 * dt);
+    }
+    npc.warmth = Math.max(0, npc.warmth);
+  }
+
+  const useDryRack = hasDryRack && Math.random() < 0.5;
+
+  switch (npc.state) {
+    case 'goFish': {
+      const tx = LAKE.cx + (Math.random() - 0.5) * 80;
+      const ty = LAKE.cy + (Math.random() - 0.5) * 40;
+      if (!npc.targetSet || distSq(npc.x, npc.y, npc.targetX, npc.targetY) < 100) {
+        npc.targetX = tx; npc.targetY = ty; npc.targetSet = true;
+      }
+      moveToward(npc, npc.targetX, npc.targetY, dt);
+      if (inLake(npc.x, npc.y)) { npc.state = 'fishing'; npc.targetSet = false; }
+      break;
+    }
+    case 'goHut': {
+      if (!npc.targetSet) { npc.targetX = FISHHUT.x; npc.targetY = FISHHUT.y + 20; npc.targetSet = true; }
+      moveToward(npc, npc.targetX, npc.targetY, dt);
+      if (dist(npc.x, npc.y, FISHHUT.x, FISHHUT.y) < FISHHUT.r + 10) {
+        const canTake = npc.capacity - totalCarryNPC(npc);
+        const take = Math.min(canTake, Math.floor(FISHHUT.stock));
+        if (take > 0) {
+          FISHHUT.stock -= take;
+          npc.rawFish += take;
+        }
+        npc.state = 'goCook';
+        npc.targetSet = false;
+      }
+      break;
+    }
+    case 'fishing': {
+      let nearestFish = null, nearestDist = Infinity;
+      for (const f of fishList) {
+        if (!f.alive) continue;
+        const d = dist(npc.x, npc.y, f.x, f.y);
+        if (d < nearestDist) { nearestDist = d; nearestFish = f; }
+      }
+      if (nearestFish) {
+        moveToward(npc, nearestFish.x, nearestFish.y, dt);
+        if (nearestDist < 30) {
+          nearestFish.alive = false; nearestFish.respawn = 2.5;
+          npc.rawFish++;
+        }
+      } else {
+        if (!npc.targetSet) {
+          npc.targetX = LAKE.cx + (Math.random() - 0.5) * LAKE.rx * 1.2;
+          npc.targetY = LAKE.cy + (Math.random() - 0.5) * LAKE.ry * 1.2;
+          npc.targetSet = true;
+        }
+        moveToward(npc, npc.targetX, npc.targetY, dt);
+        if (dist(npc.x, npc.y, npc.targetX, npc.targetY) < 10) npc.targetSet = false;
+      }
+      if (npc.rawFish >= npc.capacity) { npc.state = 'goCook'; npc.targetSet = false; }
+      break;
+    }
+    case 'goCook': {
+      if (!npc.targetSet) {
+        npc.targetX = CAMPFIRE.x + (Math.random() - 0.5) * 20;
+        npc.targetY = CAMPFIRE.y + (Math.random() - 0.5) * 20;
+        npc.targetSet = true;
+      }
+      moveToward(npc, npc.targetX, npc.targetY, dt);
+      if (dist(npc.x, npc.y, CAMPFIRE.x, CAMPFIRE.y) < CAMPFIRE.r) {
+        npc.state = 'cooking'; npc.stateTimer = 0.3; npc.targetSet = false;
+      }
+      break;
+    }
+    case 'cooking': {
+      npc.moving = false; npc.stateTimer -= dt;
+      if (npc.stateTimer <= 0) {
+        if (npc.rawFish > 0) { npc.rawFish--; npc.cookedFish++; npc.stateTimer = 0.3; }
+        else {
+          // Decide: go dry or sell
+          if (hasDryRack && useDryRack && npc.cookedFish > 0) { npc.state = 'goDry'; }
+          else { npc.state = 'goSell'; }
+          npc.targetSet = false;
+        }
+      }
+      break;
+    }
+    case 'goDry': {
+      if (!npc.targetSet) {
+        npc.targetX = DRYRACK.x + (Math.random() - 0.5) * 15;
+        npc.targetY = DRYRACK.y + (Math.random() - 0.5) * 15;
+        npc.targetSet = true;
+      }
+      moveToward(npc, npc.targetX, npc.targetY, dt);
+      if (dist(npc.x, npc.y, DRYRACK.x, DRYRACK.y) < DRYRACK.r) {
+        npc.state = 'drying'; npc.stateTimer = 0.5; npc.targetSet = false;
+      }
+      break;
+    }
+    case 'drying': {
+      npc.moving = false; npc.stateTimer -= dt;
+      if (npc.stateTimer <= 0) {
+        if (npc.cookedFish > 0) { npc.cookedFish--; npc.driedFish++; npc.stateTimer = 0.5; }
+        else { npc.state = 'goSell'; npc.targetSet = false; }
+      }
+      break;
+    }
+    case 'goSell': {
+      if (!npc.targetSet) {
+        npc.targetX = SELLZONE.x + (Math.random() - 0.5) * 20;
+        npc.targetY = SELLZONE.y + (Math.random() - 0.5) * 20;
+        npc.targetSet = true;
+      }
+      moveToward(npc, npc.targetX, npc.targetY, dt);
+      if (dist(npc.x, npc.y, SELLZONE.x, SELLZONE.y) < SELLZONE.r) {
+        npc.state = 'selling'; npc.stateTimer = 0.2; npc.targetSet = false;
+      }
+      break;
+    }
+    case 'selling': {
+      npc.moving = false; npc.stateTimer -= dt;
+      if (npc.stateTimer <= 0) {
+        if (npc.driedFish > 0) {
+          npc.driedFish--; money += 10; gainXP(3);
+          addFloatingText(npc.x, npc.y, '+10G', '#ffa500'); updateHUD(); npc.stateTimer = 0.2;
+        } else if (npc.cookedFish > 0) {
+          npc.cookedFish--; money += 5; gainXP(1);
+          addFloatingText(npc.x, npc.y, '+5G', '#ffcc00'); updateHUD(); npc.stateTimer = 0.2;
+        } else {
+          // Decide next: go to hut or lake
+          if (hasFishHut && FISHHUT.stock >= 3) { npc.state = 'goHut'; }
+          else { npc.state = 'goFish'; }
+          npc.targetSet = false;
+        }
+      }
+      break;
+    }
+    case 'warming': {
+      if (!npc.targetSet) {
+        npc.targetX = CAMPFIRE.x + (Math.random() - 0.5) * 20;
+        npc.targetY = CAMPFIRE.y + (Math.random() - 0.5) * 20;
+        npc.targetSet = true;
+      }
+      moveToward(npc, npc.targetX, npc.targetY, dt);
+      if (npc.warmth > 70) {
+        npc.state = npc.prevState || 'goFish';
+        npc.targetSet = false;
+      }
+      break;
+    }
+  }
+}
+
+function moveToward(entity, tx, ty, dt) {
+  const dx = tx - entity.x, dy = ty - entity.y;
+  const d = Math.hypot(dx, dy);
+  const speedMult = (entity.warmth !== undefined && entity.warmth < 30) ? 0.4 : 1;
+  if (d > 3) {
+    entity.x += (dx / d) * entity.speed * speedMult * dt;
+    entity.y += (dy / d) * entity.speed * speedMult * dt;
+    entity.moving = true;
+  } else { entity.moving = false; }
+}
+
+// ===== HELPERS =====
+function dist(x1, y1, x2, y2) { return Math.hypot(x2 - x1, y2 - y1); }
+function distSq(x1, y1, x2, y2) { return (x2-x1)**2 + (y2-y1)**2; }
+function inLake(wx, wy) { return ((wx - LAKE.cx) / LAKE.rx) ** 2 + ((wy - LAKE.cy) / LAKE.ry) ** 2 < 1; }
+function nearCampfire(wx, wy) { return dist(wx, wy, CAMPFIRE.x, CAMPFIRE.y) < CAMPFIRE.r; }
+function nearSellZone(wx, wy) { return dist(wx, wy, SELLZONE.x, SELLZONE.y) < SELLZONE.r; }
+function nearDryRack(wx, wy) { return hasDryRack && dist(wx, wy, DRYRACK.x, DRYRACK.y) < DRYRACK.r; }
+function nearFishHut(wx, wy) { return hasFishHut && dist(wx, wy, FISHHUT.x, FISHHUT.y) < FISHHUT.r; }
+function nearBench(wx, wy) { return hasBench && dist(wx, wy, BENCH.x, BENCH.y) < BENCH.r; }
+function totalCarry(e) { return e.rawFish + e.cookedFish + (e.driedFish || 0); }
+function totalCarryNPC(e) { return e.rawFish + e.cookedFish + (e.driedFish || 0); }
+
+// ===== INPUT (full-screen touch) =====
+const touch = { active: false, startX: 0, startY: 0, dx: 0, dy: 0 };
+const keys = {};
+const touchIndicator = document.getElementById('touch-indicator');
+const touchKnob = document.getElementById('touch-knob');
+const DEAD_ZONE = 10;
+
+function isUIElement(el) {
+  while (el) {
+    if (el.id === 'upgrade-panel' || el.classList && el.classList.contains('upg-btn')) return true;
+    el = el.parentElement;
+  }
+  return false;
+}
+
+C.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  const t = e.touches[0];
+  touch.active = true;
+  touch.startX = t.clientX;
+  touch.startY = t.clientY;
+  touch.dx = 0; touch.dy = 0;
+  touchIndicator.style.left = t.clientX + 'px';
+  touchIndicator.style.top = t.clientY + 'px';
+  touchIndicator.style.display = 'block';
+  touchKnob.style.transform = 'translate(0px, 0px)';
+}, { passive: false });
+
+C.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  if (!touch.active) return;
+  const t = e.touches[0];
+  let dx = t.clientX - touch.startX;
+  let dy = t.clientY - touch.startY;
+  const d = Math.hypot(dx, dy);
+  const maxD = 40;
+  if (d < DEAD_ZONE) { touch.dx = 0; touch.dy = 0; return; }
+  const clampD = Math.min(d, maxD);
+  const nx = (dx / d) * clampD;
+  const ny = (dy / d) * clampD;
+  touchKnob.style.transform = `translate(${nx}px, ${ny}px)`;
+  touch.dx = nx / maxD;
+  touch.dy = ny / maxD;
+}, { passive: false });
+
+function endTouch() {
+  touch.active = false; touch.dx = 0; touch.dy = 0;
+  touchIndicator.style.display = 'none';
+}
+C.addEventListener('touchend', endTouch);
+C.addEventListener('touchcancel', endTouch);
+
+// Mouse support for desktop
+C.addEventListener('mousedown', (e) => {
+  if (isUIElement(e.target)) return;
+  touch.active = true; touch.mouseDown = true;
+  touch.startX = e.clientX; touch.startY = e.clientY;
+  touch.dx = 0; touch.dy = 0;
+  touchIndicator.style.left = e.clientX + 'px';
+  touchIndicator.style.top = e.clientY + 'px';
+  touchIndicator.style.display = 'block';
+});
+window.addEventListener('mousemove', (e) => {
+  if (!touch.mouseDown) return;
+  let dx = e.clientX - touch.startX;
+  let dy = e.clientY - touch.startY;
+  const d = Math.hypot(dx, dy);
+  const maxD = 40;
+  if (d < DEAD_ZONE) { touch.dx = 0; touch.dy = 0; return; }
+  const clampD = Math.min(d, maxD);
+  const nx = (dx / d) * clampD;
+  const ny = (dy / d) * clampD;
+  touchKnob.style.transform = `translate(${nx}px, ${ny}px)`;
+  touch.dx = nx / maxD; touch.dy = ny / maxD;
+});
+window.addEventListener('mouseup', () => { touch.mouseDown = false; endTouch(); });
+
+window.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+function getInput() {
+  let jx = touch.dx, jy = touch.dy;
+  if (keys['w'] || keys['arrowup']) jy -= 1;
+  if (keys['s'] || keys['arrowdown']) jy += 1;
+  if (keys['a'] || keys['arrowleft']) jx -= 1;
+  if (keys['d'] || keys['arrowright']) jx += 1;
+  const len = Math.hypot(jx, jy);
+  if (len > 1) { jx /= len; jy /= len; }
+  return { jx, jy, active: len > 0.1 };
+}
+
+// ===== UPGRADES =====
+function upgradeCap() {
+  if (money >= capCost) {
+    money -= capCost; player.capacity += 3;
+    capCost = Math.floor(capCost * 1.6);
+    document.getElementById('btn-cap').textContent = `🎒 容量UP (${capCost}G)`;
+    updateHUD();
+  }
+}
+function upgradeSpd() {
+  if (money >= spdCost) {
+    money -= spdCost; player.speed += 30;
+    spdCost = Math.floor(spdCost * 1.6);
+    document.getElementById('btn-spd').textContent = `👟 速度UP (${spdCost}G)`;
+    updateHUD();
+  }
+}
+function hireWorker() {
+  if (money >= workerCost) {
+    money -= workerCost; npcs.push(createNPC());
+    workerCost = Math.floor(workerCost * 1.8);
+    document.getElementById('btn-worker').textContent = `👷 仲間 (${workerCost}G)`;
+    updateHUD();
+  }
+}
+function upgradeNpcCap() {
+  if (money >= npcCapCost && level >= 2) {
+    money -= npcCapCost; npcCapLevel++;
+    for (const npc of npcs) npc.capacity += 2;
+    npcCapCost = Math.floor(npcCapCost * 1.7);
+    document.getElementById('btn-npc-cap').textContent = `📦 仲間容量 (${npcCapCost}G)`;
+    updateHUD();
+  }
+}
+function buildDryRack() {
+  if (money >= dryCost && !hasDryRack && level >= 3) {
+    money -= dryCost; hasDryRack = true; DRYRACK.built = true;
+    document.getElementById('btn-dry').textContent = '🐟 干物台 ✓';
+    document.getElementById('btn-dry').disabled = true;
+    addFloatingText(DRYRACK.x, DRYRACK.y, '🔓 建設完了!', '#ff66ff');
+    updateHUD();
+  }
+}
+function buildFishHut() {
+  if (money >= hutCost && !hasFishHut && level >= 6) {
+    money -= hutCost; hasFishHut = true; FISHHUT.built = true;
+    document.getElementById('btn-hut').textContent = '🏠 釣り小屋 ✓';
+    document.getElementById('btn-hut').disabled = true;
+    addFloatingText(FISHHUT.x, FISHHUT.y, '🔓 建設完了!', '#ff66ff');
+    updateHUD();
+  }
+}
+function buildBench() {
+  if (money >= benchCost && !hasBench && level >= 4) {
+    money -= benchCost; hasBench = true; BENCH.built = true;
+    document.getElementById('btn-bench').textContent = '🪑 ベンチ ✓';
+    document.getElementById('btn-bench').disabled = true;
+    addFloatingText(BENCH.x, BENCH.y, '🔓 建設完了!', '#ff66ff');
+    updateHUD();
+  }
+}
+
+function updateHUD() {
+  document.getElementById('hud-money').textContent = `💰 ${money}`;
+  document.getElementById('hud-inv').textContent = `🎒 ${totalCarry(player)}/${player.capacity}`;
+  const nextXP = level < XP_TABLE.length ? XP_TABLE[level] : '∞';
+  document.getElementById('hud-level').textContent = `⭐ Lv.${level} (${xp}/${nextXP})`;
+  document.getElementById('btn-cap').disabled = money < capCost;
+  document.getElementById('btn-spd').disabled = money < spdCost;
+  document.getElementById('btn-worker').disabled = money < workerCost;
+  if (level >= 2) document.getElementById('btn-npc-cap').disabled = money < npcCapCost;
+  if (level >= 5) {
+    document.getElementById('warmth-fill').style.width = `${player.warmth}%`;
+    document.getElementById('warmth-fill').style.background =
+      player.warmth < 30 ? 'linear-gradient(90deg,#4444ff,#6666ff)' :
+      player.warmth < 60 ? 'linear-gradient(90deg,#ff8844,#ffaa44)' :
+      'linear-gradient(90deg,#ff4444,#ff8844,#ffcc44)';
+  }
+}
+
+let currentZone = '';
+function showZoneLabel(name) {
+  if (name !== currentZone) {
+    currentZone = name;
+    const el = document.getElementById('zone-label');
+    el.textContent = name; el.style.opacity = name ? '1' : '0';
+  }
+}
+
+// ===== UPDATE =====
+let snowTimer = 0, fireTimer = 0;
+
+function update(dt) {
+  const input = getInput();
+  const speedMult = (player.warmth < 30) ? 0.4 : 1;
+  if (input.active) {
+    const dir = screenToWorldDir(input.jx, input.jy);
+    player.x += dir.x * player.speed * speedMult * dt;
+    player.y += dir.y * player.speed * speedMult * dt;
+    player.moving = true; player.walkPhase += dt;
+    if (input.jx !== 0) player.facing = input.jx > 0 ? 1 : -1;
+  } else { player.moving = false; }
+  player.x = Math.max(40, Math.min(560, player.x));
+  player.y = Math.max(-10, Math.min(680, player.y));
+
+  // Blizzard
+  if (level >= 5) {
+    if (!blizzard.active) {
+      blizzard.nextIn -= dt;
+      if (blizzard.nextIn <= 5 && blizzard.warningTimer <= 0) {
+        blizzard.warningTimer = 3;
+        document.getElementById('blizzard-warning').style.opacity = '1';
+      }
+      if (blizzard.warningTimer > 0) {
+        blizzard.warningTimer -= dt;
+        if (blizzard.warningTimer <= 0) document.getElementById('blizzard-warning').style.opacity = '0';
+      }
+      if (blizzard.nextIn <= 0) {
+        blizzard.active = true;
+        blizzard.timer = blizzard.duration;
+        blizzard.intensity = 0;
+        document.getElementById('blizzard-warning').style.opacity = '0';
+      }
+    } else {
+      blizzard.timer -= dt;
+      blizzard.intensity = Math.min(1, blizzard.intensity + dt * 0.5);
+      // Warmth
+      if (nearCampfire(player.x, player.y)) {
+        player.warmth = Math.min(100, player.warmth + 35 * dt);
+      } else if (nearBench(player.x, player.y)) {
+        player.warmth = Math.min(100, player.warmth + 15 * dt);
+      } else {
+        player.warmth -= 10 * dt;
+      }
+      player.warmth = Math.max(0, player.warmth);
+      if (blizzard.timer <= 0) {
+        blizzard.active = false;
+        blizzard.nextIn = 45 + Math.random() * 30;
+        blizzard.intensity = 0;
+      }
+    }
+    if (!blizzard.active) player.warmth = Math.min(100, player.warmth + 20 * dt);
+  }
+
+  // Zone actions
+  actionTimer -= dt;
+  if (actionTimer <= 0) {
+    actionTimer = ACTION_CD;
+    const carry = totalCarry(player);
+    if (inLake(player.x, player.y) && carry < player.capacity) {
+      showZoneLabel('🌊 釣り場');
+      let nearestFish = null, nearestDist = 80;
+      for (const f of fishList) {
+        if (!f.alive) continue;
+        const d = dist(player.x, player.y, f.x, f.y);
+        if (d < nearestDist) { nearestDist = d; nearestFish = f; }
+      }
+      if (nearestFish) {
+        nearestFish.alive = false; nearestFish.respawn = 2.5;
+        player.rawFish++;
+        spawnFlyingItem(nearestFish.x, nearestFish.y, player.x, player.y, 'raw');
+        updateHUD();
+      }
+    } else if (nearFishHut(player.x, player.y) && carry < player.capacity) {
+      showZoneLabel('🏠 釣り小屋');
+      const canTake = player.capacity - carry;
+      const take = Math.min(canTake, Math.floor(FISHHUT.stock));
+      if (take > 0) { FISHHUT.stock -= take; player.rawFish += take; updateHUD(); }
+    } else if (nearCampfire(player.x, player.y)) {
+      showZoneLabel('🔥 焚き火');
+      if (player.rawFish > 0) { player.rawFish--; player.cookedFish++; spawnFireParticle(); updateHUD(); }
+    } else if (nearDryRack(player.x, player.y)) {
+      showZoneLabel('🐟 干物台');
+      if (player.cookedFish > 0) { player.cookedFish--; player.driedFish++; updateHUD(); }
+    } else if (nearSellZone(player.x, player.y)) {
+      showZoneLabel('🏪 販売所');
+      if (player.driedFish > 0) {
+        player.driedFish--; money += 10; gainXP(3);
+        addFloatingText(player.x, player.y, '+10G', '#ffa500'); updateHUD();
+      } else if (player.cookedFish > 0) {
+        player.cookedFish--; money += 5; gainXP(1);
+        addFloatingText(player.x, player.y, '+5G', '#ffdd00'); updateHUD();
+      }
+    } else if (nearBench(player.x, player.y)) {
+      showZoneLabel('🪑 休憩スポット');
+    } else { showZoneLabel(''); }
+  }
+
+  // Fish hut auto-production
+  if (hasFishHut && FISHHUT.stock < FISHHUT.maxStock) {
+    FISHHUT.timer += dt;
+    if (FISHHUT.timer >= 3) { FISHHUT.timer = 0; FISHHUT.stock = Math.min(FISHHUT.maxStock, FISHHUT.stock + 1); }
+  }
+
+  // Fish respawn
+  for (const f of fishList) {
+    if (!f.alive) {
+      f.respawn -= dt;
+      if (f.respawn <= 0) {
+        f.alive = true;
+        const angle = Math.random() * Math.PI * 2;
+        f.x = LAKE.cx + Math.cos(angle) * LAKE.rx * (0.3 + Math.random() * 0.6);
+        f.y = LAKE.cy + Math.sin(angle) * LAKE.ry * (0.3 + Math.random() * 0.6);
+        f.swimAngle = Math.random() * Math.PI * 2;
+      }
+    } else {
+      f.swimAngle += Math.sin(performance.now() * 0.001 * f.swimSpeed + f.angle) * 0.02;
+      f.x += Math.cos(f.swimAngle) * f.swimSpeed * dt * 5;
+      f.y += Math.sin(f.swimAngle) * f.swimSpeed * dt * 5;
+      const dxL = (f.x - LAKE.cx) / LAKE.rx, dyL = (f.y - LAKE.cy) / LAKE.ry;
+      if (dxL * dxL + dyL * dyL > 0.85) f.swimAngle += Math.PI * 0.5;
+    }
+  }
+
+  for (const npc of npcs) updateNPC(npc, dt);
+
+  // Particles
+  snowTimer -= dt;
+  const snowRate = blizzard.active ? 0.03 : 0.15;
+  if (snowTimer <= 0) { snowTimer = snowRate; spawnSnowParticle(); }
+  fireTimer -= dt;
+  if (fireTimer <= 0) { fireTimer = 0.3; spawnFireParticle(); }
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i]; p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+  // Cap particles
+  if (particles.length > 200) particles.splice(0, particles.length - 200);
+
+  for (let i = floatingTexts.length - 1; i >= 0; i--) {
+    const ft = floatingTexts[i]; ft.y += ft.vy * dt; ft.life -= dt;
+    ft.alpha = Math.max(0, ft.life / 1.2);
+    if (ft.life <= 0) floatingTexts.splice(i, 1);
+  }
+  for (let i = flyingItems.length - 1; i >= 0; i--) {
+    const fi = flyingItems[i]; fi.progress += dt / fi.duration;
+    if (fi.progress >= 1) flyingItems.splice(i, 1);
+  }
+
+  const pIso = toIso(player.x, player.y);
+  cam.x += (pIso.x - cam.x) * 0.08;
+  cam.y += (pIso.y - cam.y) * 0.08;
+}
+
+// ===== RENDER =====
+function render() {
+  X.clearRect(0, 0, W, H);
+  drawGround();
+  const objs = [];
+  for (const fp of fencePosts) objs.push({ type: 'fence', x: fp.x, y: fp.y, depth: fp.x + fp.y });
+  for (const t of trees) objs.push({ type: 'tree', x: t.x, y: t.y, s: t.s, depth: t.x + t.y });
+  objs.push({ type: 'snowman', x: 480, y: 280, depth: 760 });
+  for (const sb of snowballs) objs.push({ type: 'snowball', x: sb.x, y: sb.y, r: sb.r, depth: sb.x + sb.y });
+  for (const f of fishList) { if (f.alive) objs.push({ type: 'fish', fish: f, depth: f.x + f.y }); }
+  objs.push({ type: 'campfire', x: CAMPFIRE.x, y: CAMPFIRE.y, depth: CAMPFIRE.x + CAMPFIRE.y });
+  objs.push({ type: 'sell', x: SELLZONE.x, y: SELLZONE.y, depth: SELLZONE.x + SELLZONE.y - 10 });
+  if (hasDryRack) objs.push({ type: 'dryrack', x: DRYRACK.x, y: DRYRACK.y, depth: DRYRACK.x + DRYRACK.y });
+  if (hasFishHut) objs.push({ type: 'fishhut', x: FISHHUT.x, y: FISHHUT.y, depth: FISHHUT.x + FISHHUT.y });
+  if (hasBench) objs.push({ type: 'bench', x: BENCH.x, y: BENCH.y, depth: BENCH.x + BENCH.y });
+  for (const npc of npcs) {
+    objs.push({ type: 'npc', x: npc.x, y: npc.y, rawFish: npc.rawFish, cookedFish: npc.cookedFish,
+      driedFish: npc.driedFish, moving: npc.moving, phase: npc.walkPhase, warmth: npc.warmth, depth: npc.x + npc.y });
+  }
+  objs.push({ type: 'player', x: player.x, y: player.y, rawFish: player.rawFish, cookedFish: player.cookedFish,
+    driedFish: player.driedFish, moving: player.moving, phase: player.walkPhase, warmth: player.warmth, depth: player.x + player.y });
+  objs.sort((a, b) => a.depth - b.depth);
+
+  for (const obj of objs) {
+    switch (obj.type) {
+      case 'fence': drawFencePost(obj.x, obj.y); break;
+      case 'tree': drawTree(obj.x, obj.y, obj.s); break;
+      case 'snowman': drawSnowman(obj.x, obj.y); break;
+      case 'snowball': {
+        const p = toScreen(obj.x, obj.y);
+        drawShadow(p.x, p.y + 2 * SCALE, obj.r, obj.r * 0.5);
+        X.fillStyle = '#eaeef5'; X.beginPath();
+        X.arc(p.x, p.y - obj.r * SCALE * 0.5, obj.r * SCALE, 0, Math.PI * 2); X.fill();
+        X.fillStyle = 'rgba(255,255,255,0.5)'; X.beginPath();
+        X.arc(p.x - 2 * SCALE, p.y - obj.r * SCALE * 0.7, obj.r * SCALE * 0.3, 0, Math.PI * 2); X.fill();
+        break;
+      }
+      case 'fish': drawFishInWater(obj.fish); break;
+      case 'campfire': drawCampfire(obj.x, obj.y); break;
+      case 'sell': drawSellStand(obj.x, obj.y); break;
+      case 'dryrack': drawDryRack(obj.x, obj.y); break;
+      case 'fishhut': drawFishHut(obj.x, obj.y); break;
+      case 'bench': drawBench(obj.x, obj.y); break;
+      case 'npc':
+        drawCharacter(obj.x, obj.y, { rawFish: obj.rawFish, cookedFish: obj.cookedFish, driedFish: obj.driedFish,
+          isMoving: obj.moving, phase: obj.phase, isPlayer: false, scale: 0.9, warmth: obj.warmth });
+        break;
+      case 'player':
+        if (actionTimer > 0 && currentZone) {
+          drawActionRing(obj.x, obj.y, 1 - actionTimer / ACTION_CD,
+            currentZone.includes('釣り') ? '#5ac0ff' : currentZone.includes('焚き') ? '#ff8040' :
+            currentZone.includes('干物') ? '#d4881c' : currentZone.includes('休憩') ? '#88ddff' : '#60e060');
+        }
+        drawCharacter(obj.x, obj.y, { rawFish: obj.rawFish, cookedFish: obj.cookedFish, driedFish: obj.driedFish,
+          isMoving: obj.moving, phase: obj.phase, isPlayer: true, warmth: obj.warmth });
+        break;
+    }
+  }
+
+  // Flying items
+  for (const fi of flyingItems) {
+    const t = fi.progress;
+    const wx = fi.fromX + (fi.toX - fi.fromX) * t, wy = fi.fromY + (fi.toY - fi.fromY) * t;
+    const p = toScreen(wx, wy);
+    p.y += -40 * Math.sin(t * Math.PI) * SCALE;
+    X.globalAlpha = 1 - t * 0.3;
+    drawStackItem(p.x, p.y, fi.type);
+    X.globalAlpha = 1;
+  }
+
+  // Snow particles
+  for (const p of particles) {
+    const sx = (p.x - cam.x) * SCALE + W / 2, sy = (p.y - cam.y) * SCALE + H / 2;
+    if (p.type === 'snow') {
+      const alpha = Math.min(1, p.life / 1.5) * (blizzard.active ? 0.8 : 0.6);
+      X.fillStyle = `rgba(255,255,255,${alpha})`; X.beginPath();
+      X.arc(sx, sy, p.size * SCALE, 0, Math.PI * 2); X.fill();
+    } else if (p.type === 'smoke') {
+      const alpha = Math.min(1, p.life / 0.5) * 0.3;
+      X.fillStyle = `rgba(180,180,180,${alpha})`; X.beginPath();
+      X.arc(sx, sy, p.size * SCALE * (1 + (1 - p.life / 0.5) * 0.5), 0, Math.PI * 2); X.fill();
+    }
+  }
+
+  // Blizzard overlay
+  if (blizzard.active) {
+    X.fillStyle = `rgba(180,200,230,${blizzard.intensity * 0.15})`;
+    X.fillRect(0, 0, W, H);
+  }
+
+  // Floating texts
+  for (const ft of floatingTexts) {
+    const sx = (ft.x - cam.x) * SCALE + W / 2, sy = (ft.y - cam.y) * SCALE + H / 2;
+    X.globalAlpha = ft.alpha; X.fillStyle = ft.color;
+    X.strokeStyle = 'rgba(0,0,0,0.5)'; X.lineWidth = 3 * SCALE;
+    X.font = `bold ${16 * SCALE}px sans-serif`; X.textAlign = 'center';
+    X.strokeText(ft.text, sx, sy); X.fillText(ft.text, sx, sy);
+    X.globalAlpha = 1;
+  }
+}
+
+// ===== MAIN LOOP =====
+let lastTime = performance.now();
+function gameLoop(now) {
+  try {
+    const dt = Math.min((now - lastTime) / 1000, 0.05);
+    lastTime = now;
+    update(dt); render();
+  } catch(e) {
+    console.error('Game loop error:', e);
+  }
+  requestAnimationFrame(gameLoop);
+}
+updateHUD();
+requestAnimationFrame(gameLoop);
+// Fallback timer for background tabs
+setInterval(() => {
+  try { update(0.016); render(); } catch(e) {}
+}, 100);
+</script>
+</body>
+</html>
