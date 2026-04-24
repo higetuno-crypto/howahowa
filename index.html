@@ -51,12 +51,13 @@ canvas{display:block}
 <div id="level-popup"><div class="big"></div><div class="sub"></div></div>
 <div id="upgrade-panel">
   <button class="upg-btn worker" id="btn-worker" onclick="hireWorker()">👷 仲間 (30G)</button>
+  <button class="upg-btn worker-spd locked" id="btn-worker-spd" onclick="upgradeWorkerSpd()">⚡ 仲間速度 (60G)</button>
+  <button class="upg-btn npc-cap locked" id="btn-npc-cap" onclick="upgradeNpcCap()">📦 仲間容量 (40G)</button>
   <button class="upg-btn cap" id="btn-cap" onclick="upgradeCap()">🎒 容量UP (15G)</button>
   <button class="upg-btn spd" id="btn-spd" onclick="upgradeSpd()">👟 速度UP (20G)</button>
-  <button class="upg-btn npc-cap locked" id="btn-npc-cap" onclick="upgradeNpcCap()">📦 仲間容量 (40G)</button>
   <button class="upg-btn build locked" id="btn-dry" onclick="buildDryRack()">🐟 干物台 (80G)</button>
   <button class="upg-btn build locked" id="btn-hut" onclick="buildFishHut()">🏠 釣り小屋 (150G)</button>
-  <button class="upg-btn build locked" id="btn-bench" onclick="buildBench()">🪑 ベンチ (50G)</button>
+  <button class="upg-btn build locked" id="btn-hut-upg" onclick="upgradeHut()">🛠️ 小屋強化 (100G)</button>
 </div>
 <div id="touch-indicator"><div id="touch-knob"></div></div>
 
