@@ -113,7 +113,24 @@ const BENCH = { x: 200, y: 560, r: 40, built: false };
 let blizzard = { active: false, timer: 0, nextIn: 60, duration: 15, warningTimer: 0, intensity: 0 };
 
 // Buildings
-let hasDryRack = false, hasFishHut = false, hasBench = false;
+let hasDryRack = false, hasFishHut = false,;
+  // 仲間のステータス変数
+let npcSpdLevel = 1;
+let npcSpdCost = 60;
+// 小屋のステータス変数
+let hutLevel = 1;
+let hutUpgCost = 100;
+  const FISHHUT = { 
+  x: -250, y: -150, w: 100, h: 80, 
+  built: false, stock: 0, 
+  maxStock: 20, timer: 0,
+  getInterval: function() {
+    return Math.max(20, 180 - (hutLevel - 1) * 30); // レベルアップで間隔短縮
+  },
+  getAmount: function() {
+    return 1 + Math.floor((hutLevel - 1) / 2); // 2レベルごとに生産量+1
+  }
+};
 let dryCost = 80, hutCost = 150, benchCost = 50;
 let npcCapLevel = 0, npcCapCost = 40;
 
@@ -138,15 +155,14 @@ function spawnFish() {
 spawnFish();
 
 // NPCs
-let npcs = [];
 function createNPC() {
   return {
-    x: 300, y: 490, speed: 80 + Math.random() * 20,
-    rawFish: 0, cookedFish: 0, driedFish: 0,
+    x: 0, y: 0, 
+    speed: 1.2 + (npcSpdLevel - 1) * 0.3, // レベル反映
     capacity: 3 + npcCapLevel * 2,
-    state: 'goFish', stateTimer: 0, walkPhase: Math.random() * 10,
-    targetX: 0, targetY: 0, moving: false, targetSet: false,
-    warmth: 100
+    fishTime: 0, 
+    fishTimeLimit: Math.max(20, 80 - (npcSpdLevel - 1) * 10), // 釣り速度反映
+    target: null, state: 'idle', inv: 0
   };
 }
 
@@ -1136,40 +1152,23 @@ function showZoneLabel(name) {
 // ===== UPDATE =====
 let snowTimer = 0, fireTimer = 0;
 
-function update(dt) {
-  const input = getInput();
-  const speedMult = (player.warmth < 30) ? 0.4 : 1;
-  if (input.active) {
-    const dir = screenToWorldDir(input.jx, input.jy);
-    player.x += dir.x * player.speed * speedMult * dt;
-    player.y += dir.y * player.speed * speedMult * dt;
-    player.moving = true; player.walkPhase += dt;
-    if (input.jx !== 0) player.facing = input.jx > 0 ? 1 : -1;
-  } else { player.moving = false; }
-  player.x = Math.max(40, Math.min(560, player.x));
-  player.y = Math.max(-10, Math.min(680, player.y));
+ function update(dt) {
+  // --- 吹雪(blizzard)関連のコードはここから削除 ---
 
-  // Blizzard
-  if (level >= 5) {
-    if (!blizzard.active) {
-      blizzard.nextIn -= dt;
-      if (blizzard.nextIn <= 5 && blizzard.warningTimer <= 0) {
-        blizzard.warningTimer = 3;
-        document.getElementById('blizzard-warning').style.opacity = '1';
+  // 小屋の自動生産
+  if (FISHHUT.built) {
+    FISHHUT.timer++;
+    if (FISHHUT.timer >= FISHHUT.getInterval()) {
+      FISHHUT.timer = 0;
+      if (FISHHUT.stock < FISHHUT.maxStock) {
+        FISHHUT.stock = Math.min(FISHHUT.maxStock, FISHHUT.stock + FISHHUT.getAmount());
       }
-      if (blizzard.warningTimer > 0) {
-        blizzard.warningTimer -= dt;
-        if (blizzard.warningTimer <= 0) document.getElementById('blizzard-warning').style.opacity = '0';
-      }
-      if (blizzard.nextIn <= 0) {
-        blizzard.active = true;
-        blizzard.timer = blizzard.duration;
-        blizzard.intensity = 0;
-        document.getElementById('blizzard-warning').style.opacity = '0';
-      }
-    } else {
-      blizzard.timer -= dt;
-      blizzard.intensity = Math.min(1, blizzard.intensity + dt * 0.5);
+    }
+  }
+
+  // --- 以下の移動処理などはそのまま ---
+  if (keys['ArrowUp'] || keys['w']) player.y -= player.speed;
+ 
       // Warmth
       if (nearCampfire(player.x, player.y)) {
         player.warmth = Math.min(100, player.warmth + 35 * dt);
