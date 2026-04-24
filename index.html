@@ -34,7 +34,12 @@ canvas{display:block}
 </style>
 </head>
 <body>
-<canvas id="c"></canvas>
+<canvas id="c">
+<div id="dev-controls" style="position:fixed; top:12px; right:12px; z-index:20; display:flex; gap:6px;">
+  <button onclick="saveGame()" style="background:rgba(74,158,222,0.9); color:#fff; border:none; padding:6px 10px; border-radius:6px; font-weight:bold; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.2);">💾 セーブ</button>
+  <button onclick="resetGame()" style="background:rgba(224,48,48,0.9); color:#fff; border:none; padding:6px 10px; border-radius:6px; font-weight:bold; cursor:pointer; box-shadow:0 2px 4px rgba(0,0,0,0.2);">🔄 リセット</button>
+</div>
+</canvas>
 <div id="title-bar"><div id="title-text">雪原サバイバル</div></div>
 <div id="hud">
   <div class="hud-item" id="hud-money">💰 0</div>
@@ -1396,12 +1401,118 @@ function gameLoop(now) {
   }
   requestAnimationFrame(gameLoop);
 }
+
 updateHUD();
 requestAnimationFrame(gameLoop);
 // Fallback timer for background tabs
 setInterval(() => {
   try { update(0.016); render(); } catch(e) {}
 }, 100);
+// ===== セーブ・ロード・リセット機能 =====
+const SAVE_KEY = 'snow_survival_save_slot1';
+
+function saveGame() {
+  const data = {
+    money, xp, level,
+    player: {
+      speed: player.speed, capacity: player.capacity,
+      rawFish: player.rawFish, cookedFish: player.cookedFish, driedFish: player.driedFish,
+      warmth: player.warmth
+    },
+    costs: { capCost, spdCost, workerCost, npcCapCost },
+    upgrades: { hasDryRack, hasFishHut, hasBench, npcCapLevel },
+    stock: FISHHUT.stock,
+    npcCount: npcs.length
+  };
+  localStorage.setItem(SAVE_KEY, JSON.stringify(data));
+  addFloatingText(player.x, player.y, '💾 Saved', '#aaddff'); // 保存時に画面上にテキストを表示
+}
+
+function loadGame() {
+  const saved = localStorage.getItem(SAVE_KEY);
+  if (!saved) return;
+  
+  try {
+    const data = JSON.parse(saved);
+    money = data.money || 0;
+    xp = data.xp || 0;
+    level = data.level || 1;
+
+    if (data.player) {
+      player.speed = data.player.speed || player.speed;
+      player.capacity = data.player.capacity || player.capacity;
+      player.rawFish = data.player.rawFish || 0;
+      player.cookedFish = data.player.cookedFish || 0;
+      player.driedFish = data.player.driedFish || 0;
+      player.warmth = data.player.warmth !== undefined ? data.player.warmth : 100;
+    }
+
+    if (data.costs) {
+      capCost = data.costs.capCost || capCost;
+      spdCost = data.costs.spdCost || spdCost;
+      workerCost = data.costs.workerCost || workerCost;
+      npcCapCost = data.costs.npcCapCost || npcCapCost;
+    }
+
+    if (data.upgrades) {
+      hasDryRack = data.upgrades.hasDryRack || false;
+      hasFishHut = data.upgrades.hasFishHut || false;
+      hasBench = data.upgrades.hasBench || false;
+      npcCapLevel = data.upgrades.npcCapLevel || 0;
+    }
+
+    FISHHUT.stock = data.stock || 0;
+    DRYRACK.built = hasDryRack;
+    FISHHUT.built = hasFishHut;
+    BENCH.built = hasBench;
+
+    // 仲間の復元
+    const npcCount = data.npcCount || 0;
+    npcs = [];
+    for (let i = 0; i < npcCount; i++) {
+      const npc = createNPC();
+      npc.capacity = 3 + npcCapLevel * 2;
+      npcs.push(npc);
+    }
+
+    // UIのテキストと状態を復元
+    document.getElementById('btn-cap').textContent = `🎒 容量UP (${capCost}G)`;
+    document.getElementById('btn-spd').textContent = `👟 速度UP (${spdCost}G)`;
+    document.getElementById('btn-worker').textContent = `👷 仲間 (${workerCost}G)`;
+    document.getElementById('btn-npc-cap').textContent = `📦 仲間容量 (${npcCapCost}G)`;
+
+    if (hasDryRack) {
+      const btn = document.getElementById('btn-dry');
+      btn.textContent = '🐟 干物台 ✓'; btn.disabled = true;
+    }
+    if (hasFishHut) {
+      const btn = document.getElementById('btn-hut');
+      btn.textContent = '🏠 釣り小屋 ✓'; btn.disabled = true;
+    }
+    if (hasBench) {
+      const btn = document.getElementById('btn-bench');
+      btn.textContent = '🪑 ベンチ ✓'; btn.disabled = true;
+    }
+
+    // レベルに応じたUIのロック解除
+    unlockFeatures();
+  } catch (e) {
+    console.error("セーブデータの読み込みに失敗しました", e);
+  }
+}
+
+function resetGame() {
+  if (confirm("セーブデータを消去して初期状態にリセットしますか？")) {
+    localStorage.removeItem(SAVE_KEY);
+    location.reload();
+  }
+}
+
+// 起動時にデータを読み込む
+loadGame();
+
+// 5秒ごとにオートセーブを実行
+setInterval(saveGame, 5000);
 </script>
 </body>
 </html>
