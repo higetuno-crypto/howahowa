@@ -96,7 +96,8 @@ function screenToWorldDir(sx, sy){
 // ===== STATE =====
 const SAVE_KEY = 'snow_survival_fixed_v2';
 const XP_TABLE = [0,30,80,160,300,500,800,1200,1800,2600,3600,5000,7000,10000,15000,99999];
-const PLAYER_FISHING_TIME = 0.55;
+const PLAYER_CATCH_RADIUS = 28;
+const PLAYER_CATCH_COOLDOWN = 0.08;
 
 let money = 0;
 let xp = 0;
@@ -123,7 +124,7 @@ const player = {
   x:300, y:490, speed:120, capacity:5,
   rawFish:0, cookedFish:0, driedFish:0,
   moving:false, walkPhase:0,
-  actionKind:'', actionProgress:0, actionTimer:0
+  actionKind:'', actionProgress:0, actionTimer:0, catchCooldown:0
 };
 
 const LAKE = { cx:300, cy:80, rx:170, ry:90 };
@@ -451,27 +452,37 @@ function updatePlayer(dt){
   }
   player.x = clamp(player.x, 35, 565);
   player.y = clamp(player.y, 20, 690);
+
   updatePlayerActions(dt);
+
+  // 釣りは待機式ではなく、湖で泳いでいる魚に触れて捕まえる方式。
+  tryPlayerCatchFish(dt);
+}
+function tryPlayerCatchFish(dt){
+  player.catchCooldown = Math.max(0, player.catchCooldown - dt);
+  if(player.catchCooldown > 0) return;
+  if(!inLake(player.x, player.y)) return;
+  if(totalCarry(player) >= player.capacity) return;
+
+  const fish = getNearestAliveFish(player.x, player.y, PLAYER_CATCH_RADIUS);
+  if(!fish) return;
+
+  fish.alive = false;
+  fish.respawn = 1.8;
+  player.rawFish++;
+  player.catchCooldown = PLAYER_CATCH_COOLDOWN;
+  player.actionKind = 'catching';
+  player.actionProgress = 1;
+  gainXP(2);
+  addFloatingText(fish.x, fish.y, '+魚', '#ffb070');
+  spawnFlyingItem(fish.x, fish.y, player.x, player.y, 'raw');
+  updateHUD();
 }
 function updatePlayerActions(dt){
   player.actionKind = '';
   player.actionProgress = 0;
   if(player.moving){ player.actionTimer = 0; return; }
 
-  if(inLake(player.x, player.y) && totalCarry(player) < player.capacity){
-    player.actionKind = 'fishing';
-    player.actionTimer += dt;
-    player.actionProgress = player.actionTimer / PLAYER_FISHING_TIME;
-    if(player.actionTimer >= PLAYER_FISHING_TIME){
-      player.actionTimer = 0;
-      const fish = getNearestAliveFish(player.x, player.y, 48);
-      if(fish){ fish.alive = false; fish.respawn = 2.0; }
-      player.rawFish++;
-      gainXP(2);
-      addFloatingText(player.x, player.y, '+魚', '#ffb070');
-    }
-    return;
-  }
   if(nearFishHut(player.x, player.y) && totalCarry(player) < player.capacity && FISHHUT.stock >= 1){
     player.actionKind = 'hut';
     player.actionTimer += dt;
@@ -733,7 +744,7 @@ function spawnSmokeParticle(){
 }
 function updateZoneLabel(){
   let label = '';
-  if(inLake(player.x, player.y)) label = totalCarry(player) >= player.capacity ? '🎒 持ち物がいっぱい' : '🌊 釣り中...';
+  if(inLake(player.x, player.y)) label = totalCarry(player) >= player.capacity ? '🎒 持ち物がいっぱい' : '🌊 魚に触れて捕まえる';
   else if(nearFishHutSite(player.x, player.y)) label = hasFishHut ? `🏠 小屋 Lv.${hutLevel} / ${Math.floor(FISHHUT.stock)}/${FISHHUT.maxStock}` : (level >= 5 ? '🏠 釣り小屋予定地：建設できます' : '🏠 釣り小屋予定地：Lv.5で解放');
   else if(nearCampfire(player.x, player.y)) label = player.rawFish > 0 ? `🔥 焼いています... Lv.${campfireLevel}` : `🔥 焚き火 Lv.${campfireLevel}`;
   else if(nearDryRackSite(player.x, player.y)) label = hasDryRack ? (player.cookedFish > 0 ? `🐟 干物作成中... Lv.${dryRackLevel}` : `🐟 干物台 Lv.${dryRackLevel}`) : (level >= 3 ? '🐟 干物台予定地：建設できます' : '🐟 干物台予定地：Lv.3で解放');
@@ -1003,7 +1014,7 @@ function render(){
     if(a.type==='player') drawCharacter(player.x,player.y,{rawFish:player.rawFish,cookedFish:player.cookedFish,driedFish:player.driedFish,isMoving:player.moving,phase:player.walkPhase,isPlayer:true,scale:1});
     else drawCharacter(a.obj.x,a.obj.y,{rawFish:a.obj.rawFish,cookedFish:a.obj.cookedFish,driedFish:a.obj.driedFish,isMoving:a.obj.moving,phase:a.obj.walkPhase,isPlayer:false,scale:.92});
   }
-  const actionColors = { fishing:'#ff8844', hut:'#ffb070', cooking:'#ffcc33', drying:'#d4881c', selling:'#ffd700' };
+  const actionColors = { catching:'#ff8844', hut:'#ffb070', cooking:'#ffcc33', drying:'#d4881c', selling:'#ffd700' };
   drawActionRing(player.x, player.y, player.actionProgress, actionColors[player.actionKind] || '#fff');
   drawParticles();
 }
